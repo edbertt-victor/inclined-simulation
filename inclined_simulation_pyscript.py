@@ -1,9 +1,14 @@
-import os
+# Inclined Plane Animation Simulator (Pygame for PyScript)
+# Requirements: PyScript, pygame-pyodide, numpy, scipy
+# Run in a browser via an HTML file with PyScript
+
 import pygame
+import sys
 import math
 import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
+import asyncio
 
 # Constants
 WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
@@ -130,7 +135,7 @@ class GraphPlot:
 class InclineScene:
     def __init__(self, x, y, width, height):
         self.rect = pygame.Rect(x, y, width, height)
-        self.incline_start = (self.rect.left + 50, self.rect.bottom - 50)  # Adjusted starting point
+        self.incline_start = (self.rect.left + 50, self.rect.top + 50)
         self.block_size = 30
         self.block_pos = self.incline_start
         self.t = 0
@@ -156,23 +161,23 @@ class InclineScene:
             pixel_s = (self.s / L_PHYSICAL_MAX) * L_PIXEL_MAX
             delta_x = pixel_s * COS_THETA
             delta_y = pixel_s * SIN_THETA
-            self.block_pos = (self.incline_start[0] + delta_x, self.incline_start[1] - delta_y)  # Adjusted y-axis
+            self.block_pos = (self.incline_start[0] + delta_x, self.incline_start[1] + delta_y)
         return self.s, A * self.t
 
     def draw(self, surface):
-        incline_end = (self.incline_start[0] + L_PIXEL_MAX * COS_THETA,
-                       self.incline_start[1] - L_PIXEL_MAX * SIN_THETA)  # Adjusted y-axis
+        incline_end = (self.incline_start[0] + L_PIXEL_MAX * COS_THETA, 
+                       self.incline_start[1] + L_PIXEL_MAX * SIN_THETA)
         pygame.draw.line(surface, DARK_GRAY, self.incline_start, incline_end, 5)
         
         for i in range(0, int(L_PHYSICAL_MAX * 2) + 1):
             s = i * 0.5
             pixel_s = (s / L_PHYSICAL_MAX) * L_PIXEL_MAX
             x = self.incline_start[0] + pixel_s * COS_THETA
-            y = self.incline_start[1] - pixel_s * SIN_THETA  # Adjusted y-axis
+            y = self.incline_start[1] + pixel_s * SIN_THETA
             pygame.draw.circle(surface, BLACK, (int(x), int(y)), 3)
 
-        block_rect = pygame.Rect(self.block_pos[0] - self.block_size // 2,
-                                 self.block_pos[1] - self.block_size // 2,
+        block_rect = pygame.Rect(self.block_pos[0] - self.block_size // 2, 
+                                 self.block_pos[1] - self.block_size // 2, 
                                  self.block_size, self.block_size)
         pygame.draw.rect(surface, RED, block_rect)
 
@@ -256,7 +261,6 @@ class SimulationController:
     def draw(self, surface):
         surface.fill(LIGHT_GRAY)
         pygame.draw.rect(surface, LIGHT_BLUE, (LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, WINDOW_HEIGHT))
-        pygame.draw.rect(surface, BLACK, (50, 50, 100, 100))  # Debug rectangle
         
         header = self.header_font.render("Inclined-Plane Velocity Simulation", True, BLACK)
         surface.blit(header, (WINDOW_WIDTH // 2 - header.get_width() // 2, 20))
@@ -302,32 +306,24 @@ class SimulationController:
         fps = str(int(clock.get_fps()))
         surface.blit(self.font.render(f"FPS: {fps}", True, BLACK), (10, 10))
 
-def main():
-    try:
-        print("Initializing Pygame...")
-        os.environ["PYSDL2_SURFACE"] = "pygame-canvas"
-        pygame.init()
-        print("Pygame initialized, setting mode...")
-        screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("Inclined Plane Simulation")
-        global clock
-        clock = pygame.time.Clock()
-        print("Clock and controller setup...")
-        controller = SimulationController()
+async def main():
+    pygame.init()
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("Inclined Plane Simulation")
+    global clock
+    clock = pygame.time.Clock()
+    controller = SimulationController()
 
-        running = True
-        while running:
-            events = pygame.event.get()
-            mouse_pos = pygame.mouse.get_pos()
-            running = controller.handle_events(events, mouse_pos)
-            controller.update(1.0 / FPS)
-            controller.draw(screen)
-            pygame.display.flip()
-            clock.tick(FPS)
-        print("Simulation loop exited.")
-    except Exception as e:
-        print(f"Error: {e}")
-        raise
+    running = True
+    while running:
+        events = pygame.event.get()
+        mouse_pos = pygame.mouse.get_pos()
+        running = controller.handle_events(events, mouse_pos)
+        controller.update(1.0 / FPS)
+        controller.draw(screen)
+        pygame.display.flip()
+        clock.tick(FPS)
+        await asyncio.sleep(1.0 / FPS)
 
-if __name__ == "__main__":
-    main()
+# For PyScript, call main directly
+asyncio.ensure_future(main())
