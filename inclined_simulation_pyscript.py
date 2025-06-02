@@ -3,6 +3,25 @@ import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
 from js import document     # let us hide the “loading” div
+from js import console
+
+async def main():
+    console.log("▶️ main() has started!")   # you should see this in the browser’s console
+    document.getElementById("loading").style.display = "none"
+
+    pygame.init()
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("Inclined Plane Simulation")
+
+    # Drop a bright red rectangle so we know drawing is happening:
+    screen.fill((255,0,0))                    # fill entire canvas RED once
+    pygame.display.flip()
+
+    global clock
+    clock = pygame.time.Clock()
+    controller = SimulationController()
+
+    # (…the rest of your l
 
 # ── Constants ─────────────────────────────────────────────────────────────
 WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
