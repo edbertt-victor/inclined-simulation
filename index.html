@@ -9,6 +9,7 @@
     <style>
         body {
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
@@ -23,11 +24,12 @@
         .loading {
             font-size: 24px;
             color: #333;
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="loading">Loading simulation...</div>
+    <div class="loading">Loading simulation... (may take 10-30 seconds)</div>
     <canvas id="pygame-canvas" width="1024" height="768"></canvas>
     <py-config>
         packages = ["pygame-pyodide==2.5.0.0", "numpy", "scipy"]
