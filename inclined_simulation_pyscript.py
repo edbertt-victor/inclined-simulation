@@ -1,6 +1,6 @@
 # Inclined Plane Animation Simulator (Pygame for PyScript)
-# Requirements: PyScript, pygame-pyodide, numpy, scipy
-# Run in a browser via an HTML file with PyScript
+# Requirements: PyScript, pygame-pyodide, numpy, scipy for web; pygame, numpy, scipy for local
+# Run in a browser via index.html with PyScript, or locally with Python
 
 import pygame
 import sys
@@ -9,6 +9,7 @@ import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
 import asyncio
+import os
 
 # Constants
 WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
@@ -325,5 +326,10 @@ async def main():
         clock.tick(FPS)
         await asyncio.sleep(1.0 / FPS)
 
-# For PyScript, call main directly
-asyncio.ensure_future(main())
+# Run differently based on environment
+if 'PYODIDE' in os.environ:
+    # PyScript/Pyodide environment (browser)
+    asyncio.ensure_future(main())
+else:
+    # Local Python environment
+    asyncio.run(main())
