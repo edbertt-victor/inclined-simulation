@@ -1,46 +1,45 @@
-# Inclined Plane Animation Simulator (Pygame for PyScript)
-# Requirements: PyScript, pygame-pyodide, numpy, scipy
-# Run in a browser via an HTML file with PyScript
-
-import pygame
-import sys
-import math
+import pygame, sys, math, asyncio
 import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
-import asyncio
+from js import document     # let us hide the “loading” div
 
-# Constants
+# ── Constants ─────────────────────────────────────────────────────────────
 WINDOW_WIDTH, WINDOW_HEIGHT = 1024, 768
 LEFT_PANEL_WIDTH = 600
 RIGHT_PANEL_WIDTH = WINDOW_WIDTH - LEFT_PANEL_WIDTH
 FPS = 60
-G = 9.8  # Gravity (m/s²)
-THETA = math.radians(30)  # 30° incline
+G = 9.8  # m/s²
+THETA = math.radians(30)
 SIN_THETA, COS_THETA = math.sin(THETA), math.cos(THETA)
-A = G * SIN_THETA  # Acceleration along incline (4.9 m/s²)
-L_PHYSICAL_MAX = 2.5  # Max plane length (m)
-L_PIXEL_MAX = 400  # Max plane length in pixels
+A = G * SIN_THETA  # ≈ 4.9 m/s² along incline
+L_PHYSICAL_MAX = 2.5  # max plane length in meters
+L_PIXEL_MAX = 400     # max length in pixels
 
-# Experimental data
-HEIGHTS = [0.25, 0.50, 0.75, 1.00, 1.25]  # meters
-PLANE_LENGTHS = [0.50, 1.00, 1.50, 2.00, 2.50]  # meters
-EXP_AVG_SPEEDS = [1.11, 1.0, 1.5, 2.0, 2.5]  # m/s
-EXP_STD_DEVS = [0.03, 0.04, 0.03, 0.03, 0.04]  # m/s
+HEIGHTS = [0.25, 0.50, 0.75, 1.00, 1.25]
+PLANE_LENGTHS = [0.50, 1.00, 1.50, 2.00, 2.50]
+EXP_AVG_SPEEDS = [1.11, 1.00, 1.50, 2.00, 2.50]
+EXP_STD_DEVS   = [0.03, 0.04, 0.03, 0.03, 0.04]
 
-# Colors
-WHITE = (255, 255, 255)
+WHITE      = (255, 255, 255)
 LIGHT_GRAY = (200, 200, 200)
-DARK_GRAY = (50, 50, 50)
-RED = (200, 0, 0)
-NAVY = (0, 0, 100)
-BLACK = (0, 0, 0)
+DARK_GRAY  = (50,  50,  50)
+RED        = (200,   0,   0)
+NAVY       = (  0,   0, 100)
+BLACK      = (  0,   0,   0)
 LIGHT_BLUE = (200, 200, 255)
-GREEN = (0, 200, 0)
-YELLOW = (255, 255, 0)
+GREEN      = (  0, 200,   0)
+YELLOW     = (255, 255,   0)
+
+# ── Button, GraphPlot, InclineScene, SimulationController classes ─────────
+# (Exactly as you wrote them above, with no changes.)
+# Just be sure you have pygame.font.init() inside pygame.init() so fonts load.
+# ────────────────────────────────────────────────────────────────────────────
+
 
 class Button:
-    def __init__(self, x, y, width, height, text, color=NAVY, hover_color=LIGHT_BLUE, text_color=WHITE):
+    def __init__(self, x, y, width, height, text,
+                 color=NAVY, hover_color=LIGHT_BLUE, text_color=WHITE):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.color = color
@@ -66,6 +65,7 @@ class Button:
             return True
         return False
 
+
 class GraphPlot:
     def __init__(self, x, y, width, height):
         self.rect = pygame.Rect(x, y, width, height)
@@ -81,11 +81,17 @@ class GraphPlot:
 
         x_axis_y = self.rect.bottom - 20
         y_axis_x = self.rect.left + 20
-        pygame.draw.line(surface, BLACK, (self.rect.left, x_axis_y), (self.rect.right, x_axis_y), 2)
-        pygame.draw.line(surface, BLACK, (y_axis_x, self.rect.top), (y_axis_x, self.rect.bottom), 2)
+        pygame.draw.line(surface, BLACK,
+                         (self.rect.left, x_axis_y),
+                         (self.rect.right, x_axis_y), 2)
+        pygame.draw.line(surface, BLACK,
+                         (y_axis_x, self.rect.top),
+                         (y_axis_x, self.rect.bottom), 2)
 
-        surface.blit(self.font.render("s (m)", True, BLACK), (self.rect.right - 30, x_axis_y + 5))
-        surface.blit(self.font.render("v (m/s)", True, BLACK), (y_axis_x - 15, self.rect.top - 15))
+        surface.blit(self.font.render("s (m)", True, BLACK),
+                     (self.rect.right - 30, x_axis_y + 5))
+        surface.blit(self.font.render("v (m/s)", True, BLACK),
+                     (y_axis_x - 15, self.rect.top - 15))
 
         max_s = PLANE_LENGTHS[-1]
         max_v = 4.0
@@ -96,41 +102,47 @@ class GraphPlot:
             y = self.rect.bottom - 20 - (v / max_v) * (self.rect.height - 40)
             pygame.draw.circle(surface, RED, (int(x), int(y)), 2)
 
+        # If a height is selected, also draw the linear + power‐law fits + highlight
         if selected_height in HEIGHTS:
             idx = HEIGHTS.index(selected_height)
             L = PLANE_LENGTHS[idx]
             h_array = np.array(HEIGHTS)
-            v_exp = np.array(EXP_AVG_SPEEDS)
+            v_exp   = np.array(EXP_AVG_SPEEDS)
+
+            # Linear fit
             slope, intercept, r_value, _, _ = stats.linregress(h_array, v_exp)
             x_vals = np.linspace(0, max_s, 100)
             v_linear = slope * (x_vals / 2) + intercept
             for i in range(len(x_vals) - 1):
-                x1 = self.rect.left + 20 + (x_vals[i] / max_s) * (self.rect.width - 40)
-                y1 = self.rect.bottom - 20 - (v_linear[i] / max_v) * (self.rect.height - 40)
-                x2 = self.rect.left + 20 + (x_vals[i + 1] / max_s) * (self.rect.width - 40)
-                y2 = self.rect.bottom - 20 - (v_linear[i + 1] / max_v) * (self.rect.height - 40)
-                pygame.draw.line(surface, GREEN, (x1, y1), (x2, y2), 1)
+                x1 = self.rect.left + 20 + (x_vals[i] / max_s)*(self.rect.width - 40)
+                y1 = self.rect.bottom - 20 - (v_linear[i] / max_v)*(self.rect.height - 40)
+                x2 = self.rect.left + 20 + (x_vals[i+1] / max_s)*(self.rect.width - 40)
+                y2 = self.rect.bottom - 20 - (v_linear[i+1] / max_v)*(self.rect.height - 40)
+                pygame.draw.line(surface, GREEN, (x1,y1), (x2,y2), 1)
 
+            # Power‐law fit
             def power_law(h, A_fit, p):
-                return A_fit * h ** p
+                return A_fit * h**p
             popt, _ = curve_fit(power_law, h_array, v_exp)
             A_fit, p = popt
-            v_power = power_law(x_vals / 2, A_fit, p)
+            v_power = power_law(x_vals/2, A_fit, p)
             for i in range(len(x_vals) - 1):
-                x1 = self.rect.left + 20 + (x_vals[i] / max_s) * (self.rect.width - 40)
-                y1 = self.rect.bottom - 20 - (v_power[i] / max_v) * (self.rect.height - 40)
-                x2 = self.rect.left + 20 + (x_vals[i + 1] / max_s) * (self.rect.width - 40)
-                y2 = self.rect.bottom - 20 - (v_power[i + 1] / max_v) * (self.rect.height - 40)
-                pygame.draw.line(surface, YELLOW, (x1, y1), (x2, y2), 1)
+                x1 = self.rect.left + 20 + (x_vals[i]/max_s)*(self.rect.width - 40)
+                y1 = self.rect.bottom - 20 - (v_power[i]/max_v)*(self.rect.height - 40)
+                x2 = self.rect.left + 20 + (x_vals[i+1]/max_s)*(self.rect.width - 40)
+                y2 = self.rect.bottom - 20 - (v_power[i+1]/max_v)*(self.rect.height - 40)
+                pygame.draw.line(surface, YELLOW, (x1,y1), (x2,y2), 1)
 
+            # Highlight the experimental point at s = L
             s_highlight = L
             v_highlight = v_exp[idx]
-            x_h = self.rect.left + 20 + (s_highlight / max_s) * (self.rect.width - 40)
-            y_h = self.rect.bottom - 20 - (v_highlight / max_v) * (self.rect.height - 40)
+            x_h = self.rect.left + 20 + (s_highlight/max_s)*(self.rect.width - 40)
+            y_h = self.rect.bottom - 20 - (v_highlight/max_v)*(self.rect.height - 40)
             pygame.draw.circle(surface, BLACK, (int(x_h), int(y_h)), 5)
 
     def clear(self):
         self.points = []
+
 
 class InclineScene:
     def __init__(self, x, y, width, height):
@@ -155,20 +167,23 @@ class InclineScene:
     def update(self, dt):
         if self.s < self.L:
             self.t += dt
-            self.s = 0.5 * A * self.t ** 2
+            self.s = 0.5 * A * self.t**2
             if self.s > self.L:
                 self.s = self.L
             pixel_s = (self.s / L_PHYSICAL_MAX) * L_PIXEL_MAX
             delta_x = pixel_s * COS_THETA
             delta_y = pixel_s * SIN_THETA
-            self.block_pos = (self.incline_start[0] + delta_x, self.incline_start[1] + delta_y)
+            self.block_pos = (self.incline_start[0] + delta_x,
+                              self.incline_start[1] + delta_y)
         return self.s, A * self.t
 
     def draw(self, surface):
-        incline_end = (self.incline_start[0] + L_PIXEL_MAX * COS_THETA, 
+        incline_end = (self.incline_start[0] + L_PIXEL_MAX * COS_THETA,
                        self.incline_start[1] + L_PIXEL_MAX * SIN_THETA)
-        pygame.draw.line(surface, DARK_GRAY, self.incline_start, incline_end, 5)
-        
+        pygame.draw.line(surface, DARK_GRAY,
+                         self.incline_start, incline_end, 5)
+
+        # draw tick‐marks every 0.5 m
         for i in range(0, int(L_PHYSICAL_MAX * 2) + 1):
             s = i * 0.5
             pixel_s = (s / L_PHYSICAL_MAX) * L_PIXEL_MAX
@@ -176,10 +191,14 @@ class InclineScene:
             y = self.incline_start[1] + pixel_s * SIN_THETA
             pygame.draw.circle(surface, BLACK, (int(x), int(y)), 3)
 
-        block_rect = pygame.Rect(self.block_pos[0] - self.block_size // 2, 
-                                 self.block_pos[1] - self.block_size // 2, 
-                                 self.block_size, self.block_size)
+        # draw the block
+        block_rect = pygame.Rect(
+            self.block_pos[0] - self.block_size // 2,
+            self.block_pos[1] - self.block_size // 2,
+            self.block_size, self.block_size
+        )
         pygame.draw.rect(surface, RED, block_rect)
+
 
 class SimulationController:
     def __init__(self):
@@ -187,13 +206,19 @@ class SimulationController:
         self.running = False
         self.paused = False
         self.scene = InclineScene(0, 100, LEFT_PANEL_WIDTH, WINDOW_HEIGHT - 100)
-        self.graph = GraphPlot(LEFT_PANEL_WIDTH + 20, 400, RIGHT_PANEL_WIDTH - 40, 200)
+        self.graph = GraphPlot(LEFT_PANEL_WIDTH + 20, 400,
+                               RIGHT_PANEL_WIDTH - 40, 200)
+
+        # create one button for each height
         self.buttons = [
-            Button(LEFT_PANEL_WIDTH + 20, 150 + i * 40, 150, 30, f"h = {h} m")
+            Button(LEFT_PANEL_WIDTH + 20, 150 + i*40, 150, 30,
+                   f"h = {h} m")
             for i, h in enumerate(HEIGHTS)
         ]
         self.start_button = Button(LEFT_PANEL_WIDTH + 20, 350, 150, 30, "Start")
         self.reset_button = Button(LEFT_PANEL_WIDTH + 20, 390, 150, 30, "Reset")
+
+        pygame.font.init()
         self.font = pygame.font.SysFont('Arial', 18)
         self.header_font = pygame.font.SysFont('Arial', 24, bold=True)
         self.fit_results = None
@@ -205,9 +230,12 @@ class SimulationController:
                 return False
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return False
+
             for btn in self.buttons:
                 if btn.is_clicked(event, mouse_pos):
-                    self.selected_height = float(btn.text.split('=')[1].strip().split()[0])
+                    # change the height
+                    self.selected_height = float(btn.text.split('=')[1]
+                                                 .strip().split()[0])
                     self.scene.set_height(self.selected_height)
                     self.running = False
                     self.paused = False
@@ -215,6 +243,7 @@ class SimulationController:
                     self.graph.clear()
                     self.fit_results = None
                     self.match_status = ""
+
             if self.start_button.is_clicked(event, mouse_pos):
                 if not self.running:
                     self.running = True
@@ -222,7 +251,9 @@ class SimulationController:
                     self.start_button.text = "Pause"
                 else:
                     self.paused = not self.paused
-                    self.start_button.text = "Resume" if self.paused else "Pause"
+                    self.start_button.text = ("Resume"
+                                              if self.paused else "Pause")
+
             if self.reset_button.is_clicked(event, mouse_pos):
                 self.scene.reset()
                 self.running = False
@@ -238,35 +269,47 @@ class SimulationController:
             s, v = self.scene.update(dt)
             self.graph.add_point(s, v)
             if s >= self.scene.L:
+                # once the block reaches the bottom, stop updating
                 self.running = False
                 self.start_button.text = "Start"
+
+                # compute “match” vs experiment
                 idx = HEIGHTS.index(self.selected_height)
                 actual_time = self.scene.t
-                measured_v = self.scene.L / actual_time if actual_time > 0 else 0
+                measured_v = (self.scene.L / actual_time) if actual_time>0 else 0
                 exp_v = EXP_AVG_SPEEDS[idx]
                 exp_sd = EXP_STD_DEVS[idx]
-                self.match_status = "Success" if abs(measured_v - exp_v) <= exp_sd else "Deviation"
+                self.match_status = ("Success"
+                                     if abs(measured_v - exp_v) <= exp_sd
+                                     else "Deviation")
+
+                # compute fit coefficients
                 h_array = np.array(HEIGHTS)
-                v_exp = np.array(EXP_AVG_SPEEDS)
+                v_exp   = np.array(EXP_AVG_SPEEDS)
                 slope, intercept, r_value, _, _ = stats.linregress(h_array, v_exp)
                 def power_law(h, A_fit, p):
-                    return A_fit * h ** p
+                    return A_fit * h**p
                 popt, _ = curve_fit(power_law, h_array, v_exp)
                 A_fit, p = popt
                 self.fit_results = {
-                    'linear': (slope, intercept, r_value ** 2),
+                    'linear': (slope, intercept, r_value**2),
                     'power': (A_fit, p)
                 }
 
     def draw(self, surface):
         surface.fill(LIGHT_GRAY)
-        pygame.draw.rect(surface, LIGHT_BLUE, (LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, WINDOW_HEIGHT))
-        
-        header = self.header_font.render("Inclined-Plane Velocity Simulation", True, BLACK)
-        surface.blit(header, (WINDOW_WIDTH // 2 - header.get_width() // 2, 20))
+        pygame.draw.rect(surface, LIGHT_BLUE,
+                         (LEFT_PANEL_WIDTH, 0, RIGHT_PANEL_WIDTH, WINDOW_HEIGHT))
 
+        # header
+        header = self.header_font.render("Inclined-Plane Velocity Simulation", True, BLACK)
+        surface.blit(header,
+                     (WINDOW_WIDTH//2 - header.get_width()//2, 20))
+
+        # draw the incline + block
         self.scene.draw(surface)
 
+        # draw buttons
         mouse_pos = pygame.mouse.get_pos()
         for btn in self.buttons:
             is_hovered = btn.is_hovered(mouse_pos)
@@ -274,6 +317,7 @@ class SimulationController:
         self.start_button.draw(surface, self.start_button.is_hovered(mouse_pos))
         self.reset_button.draw(surface, self.reset_button.is_hovered(mouse_pos))
 
+        # show theoretical vs experimental data on the right
         idx = HEIGHTS.index(self.selected_height)
         L = PLANE_LENGTHS[idx]
         t_theory = math.sqrt(2 * L / A)
@@ -282,7 +326,7 @@ class SimulationController:
             f"Height: {self.selected_height:.2f} m",
             f"Length: {L:.2f} m",
             f"Exp. Avg. Speed: {EXP_AVG_SPEEDS[idx]:.2f} m/s",
-            f"Exp. SD: {EXP_STD_DEVS[idx]:.2f} m/s",
+            f"Exp.  SD: {EXP_STD_DEVS[idx]:.2f} m/s",
             f"Theor. Avg. Speed: {v_theory:.2f} m/s",
             f"Theor. Time: {t_theory:.2f} s",
             f"Elapsed Time: {self.scene.t:.2f} s",
@@ -296,17 +340,26 @@ class SimulationController:
             data_texts.extend([
                 f"Linear Fit: v = {slope:.2f}h + {intercept:.2f}",
                 f"Linear R²: {r2:.4f}",
-                f"Power Fit: v = {A_fit:.2f}h^{p:.2f}"
+                f"Power Fit: v = {A_fit:.2f} h^{p:.2f}"
             ])
-        for i, text in enumerate(data_texts):
-            surface.blit(self.font.render(text, True, BLACK), (LEFT_PANEL_WIDTH + 20, 600 + i * 20))
 
+        for i, text in enumerate(data_texts):
+            surface.blit(self.font.render(text, True, BLACK),
+                         (LEFT_PANEL_WIDTH + 20, 600 + i*20))
+
+        # draw the graph subplot
         self.graph.draw(surface, self.selected_height)
 
+        # draw FPS in the corner
         fps = str(int(clock.get_fps()))
         surface.blit(self.font.render(f"FPS: {fps}", True, BLACK), (10, 10))
 
+
 async def main():
+    # 1) Hide the “Loading…” text
+    document.getElementById("loading").style.display = "none"
+
+    # 2) Initialize Pygame and make it draw into <canvas id="pygame-canvas">
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Inclined Plane Simulation")
@@ -325,5 +378,5 @@ async def main():
         clock.tick(FPS)
         await asyncio.sleep(1.0 / FPS)
 
-# For PyScript, call main directly
-asyncio.ensure_future(main())
+# Instead of ensure_future, PyScript needs a top-level await:
+await main()
