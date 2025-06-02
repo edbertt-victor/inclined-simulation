@@ -1,41 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inclined Plane Simulation</title>
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.8.2/core.css">
-    <script type="module" src="https://pyscript.net/releases/2024.8.2/core.js"></script>
-    <style>
-        body {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
-            font-family: Arial, sans-serif;
-        }
-        #pygame-canvas {
-            border: 2px solid #333;
-            background-color: #ccc;
-        }
-        .loading {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 10px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inclined Plane Simulation</title>
+  <link rel="stylesheet" href="https://pyscript.net/releases/2024.8.2/core.css" />
+  <script type="module" src="https://pyscript.net/releases/2024.8.2/core.js"></script>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
+      font-family: Arial, sans-serif;
+    }
+    .loading {
+      font-size: 24px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    #pygame-canvas {
+      border: 2px solid #333;
+      background-color: #ccc;
+    }
+  </style>
 </head>
 <body>
-    <div class="loading">Loading simulation... (may take 10-30 seconds)</div>
-    <canvas id="pygame-canvas" width="1024" height="768"></canvas>
-    <py-config>
-        packages = ["pygame-pyodide==2.5.0.0", "numpy", "scipy"]
-        [[fetch]]
-        files = ["inclined_simulation_pyscript.py"]
-    </py-config>
-    <py-script src="./inclined_simulation_pyscript.py"></py-script>
+  <!-- Give this an id so we can hide it from PyScript -->
+  <div id="loading" class="loading">
+    Loading simulation… (may take 10–30 seconds)
+  </div>
+
+  <!-- Pygame will attach to this canvas -->
+  <canvas id="pygame-canvas" width="1024" height="768"></canvas>
+
+  <py-config>
+    packages = [
+      "pygame-pyodide==2.5.0.0",
+      "numpy",
+      "scipy"
+    ]
+    [[fetch]]
+    files = ["inclined_simulation_pyscript.py"]
+  </py-config>
+
+  <!-- This loads your Python script -->
+  <py-script src="inclined_simulation_pyscript.py"></py-script>
 </body>
 </html>
